@@ -1,7 +1,13 @@
-from aiogram import Router
-from aiogram.types import Message, InlineKeyboardMarkup
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+import asyncpg
+
+from db import queries as q
+from handlers.common import format_board
+from keyboards.inline import board_filter_keyboard
+from config import ART_DIRECTOR_IDS
 
 router = Router()
 
@@ -9,18 +15,18 @@ router = Router()
 def main_menu_private() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📊 Борд задач", callback_data="go_board")
-    builder.button(text="📋 Как пользоваться", callback_data="go_help")
+    builder.button(text="📖 Как пользоваться", callback_data="go_help")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def main_menu_group() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🆕 Создать проект", switch_inline_query_current_chat="/new_project")
-    builder.button(text="📋 Показать чеклист", switch_inline_query_current_chat="/show_checklist")
-    builder.button(text="➕ Добавить раздел", switch_inline_query_current_chat="/new_section")
-    builder.button(text="✅ Добавить задачу", switch_inline_query_current_chat="/new_task")
-    builder.button(text="📅 Изменить сроки", switch_inline_query_current_chat="/set_project_dates")
+    builder.button(text="🆕 Создать проект", callback_data="cmd_new_project")
+    builder.button(text="📋 Показать чеклист", callback_data="cmd_show_checklist")
+    builder.button(text="➕ Добавить раздел", callback_data="cmd_new_section")
+    builder.button(text="✅ Добавить задачу", callback_data="cmd_new_task")
+    builder.button(text="📅 Изменить сроки", callback_data="cmd_set_dates")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -62,14 +68,32 @@ async def cmd_help(message: Message):
     )
 
 
-from aiogram.types import CallbackQuery
-from aiogram import F
-import asyncpg
-from db import queries as q
-from handlers.common import format_board
-from keyboards.inline import board_filter_keyboard
-from config import ART_DIRECTOR_IDS
+# ── Кнопки меню в группе ──────────────────────────────────────────────────────
 
+@router.callback_query(F.data == "cmd_new_project")
+async def cb_new_project(call: CallbackQuery):
+    await call.message.answer("Введи название проекта:")
+    await call.answer()
+    # Триггерим через фейковое сообщение — просто подсказываем команду
+    await call.message.answer("Используй команду /new_project для создания проекта.")
+
+
+@router.callback_query(F.data.startswith("cmd_"))
+async def cb_menu_cmd(call: CallbackQuery):
+    mapping = {
+        "cmd_new_project":    "/new_project",
+        "cmd_show_checklist": "/show_checklist",
+        "cmd_new_section":    "/new_section",
+        "cmd_new_task":       "/new_task",
+        "cmd_set_dates":      "/set_project_dates",
+    }
+    cmd = mapping.get(call.data)
+    if cmd:
+        await call.message.answer(f"Отправь команду: {cmd}")
+    await call.answer()
+
+
+# ── Кнопки меню в личке ───────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "go_board")
 async def cb_go_board(call: CallbackQuery, pool: asyncpg.Pool):
