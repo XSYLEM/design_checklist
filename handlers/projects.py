@@ -23,7 +23,7 @@ class EditDates(StatesGroup):
     waiting_end   = State()
 
 
-@router.message(Command("создать_чеклист"))
+@router.message(Command("new_project"))
 async def cmd_start_project(message: Message, state: FSMContext, pool: asyncpg.Pool):
     if message.chat.type == "private":
         await message.answer("Эта команда используется в чате проекта (группе).")
@@ -32,7 +32,7 @@ async def cmd_start_project(message: Message, state: FSMContext, pool: asyncpg.P
     if existing:
         await message.answer(
             f"Проект <b>{existing['name']}</b> уже создан в этом чате.\n"
-            f"Используй /показать_чеклист для просмотра или /изменить_сроки_реализации для смены дат.",
+            f"Используй /show_checklist для просмотра или /set_project_dates для смены дат.",
             parse_mode="HTML"
         )
         return
@@ -79,17 +79,17 @@ async def project_end(message: Message, state: FSMContext, pool: asyncpg.Pool):
     await message.answer(
         f"✅ Проект <b>{project['name']}</b> создан!\n"
         f"🗓 {fmt_date(project['start_date'])} → {fmt_date(project['end_date'])}\n\n"
-        "Теперь добавь первый раздел: /добавить_раздел",
+        "Теперь добавь первый раздел: /new_section",
         parse_mode="HTML",
         reply_markup=project_dates_keyboard(project["id"])
     )
 
 
-@router.message(Command("показать_чеклист"))
+@router.message(Command("show_checklist"))
 async def cmd_checklist(message: Message, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:
-        await message.answer("Проект не найден. Сначала /создать_чеклист")
+        await message.answer("Проект не найден. Сначала /new_project")
         return
     sections = await q.get_sections(pool, project["id"])
     sections_with_tasks = []
@@ -101,7 +101,7 @@ async def cmd_checklist(message: Message, pool: asyncpg.Pool):
                          reply_markup=project_dates_keyboard(project["id"]))
 
 
-@router.message(Command("изменить_сроки_реализации"))
+@router.message(Command("set_project_dates"))
 async def cmd_edit_dates(message: Message, state: FSMContext, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:

@@ -21,7 +21,7 @@ def is_art_director(user_id: int) -> bool:
     return not ART_DIRECTOR_IDS or user_id in ART_DIRECTOR_IDS
 
 
-@router.message(Command("все_задачи"))
+@router.message(Command("board"))
 async def cmd_board(message: Message, state: FSMContext, pool: asyncpg.Pool):
     if message.chat.type != "private":
         await message.answer("Борд доступен только в личке с ботом.")

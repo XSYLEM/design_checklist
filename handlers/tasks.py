@@ -28,11 +28,11 @@ class EditDeadline(StatesGroup):
     waiting_date = State()
 
 
-@router.message(Command("добавить_раздел"))
+@router.message(Command("new_section"))
 async def cmd_add_section(message: Message, state: FSMContext, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:
-        await message.answer("Сначала создай проект: /создать_чеклист")
+        await message.answer("Сначала создай проект: /new_project")
         return
     await state.update_data(project_id=project["id"])
     await state.set_state(AddSection.waiting_name)
@@ -45,20 +45,20 @@ async def section_name(message: Message, state: FSMContext, pool: asyncpg.Pool):
     section = await q.create_section(pool, data["project_id"], message.text.strip())
     await state.clear()
     await message.answer(
-        f"✅ Раздел <b>{section['name']}</b> создан!\nДобавь задачу: /добавить_задачу",
+        f"✅ Раздел <b>{section['name']}</b> создан!\nДобавь задачу: /new_task",
         parse_mode="HTML"
     )
 
 
-@router.message(Command("добавить_задачу"))
+@router.message(Command("new_task"))
 async def cmd_add_task(message: Message, state: FSMContext, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:
-        await message.answer("Сначала создай проект: /создать_чеклист")
+        await message.answer("Сначала создай проект: /new_project")
         return
     sections = await q.get_sections(pool, project["id"])
     if not sections:
-        await message.answer("Сначала создай раздел: /добавить_раздел")
+        await message.answer("Сначала создай раздел: /new_section")
         return
     await state.update_data(project_id=project["id"])
     await state.set_state(AddTask.waiting_section)
@@ -107,14 +107,14 @@ async def task_deadline(message: Message, state: FSMContext, pool: asyncpg.Pool)
         f"📌 <b>{task['title']}</b>\n"
         f"📅 Дедлайн: {fmt_date(task['deadline'])}\n"
         f"🔵 В работе\n\n"
-        f"Управление задачей /редактировать_задачу_{task['id']}",
+        f"Управление задачей /task_{task['id']}",
         parse_mode="HTML"
     )
 
 
-@router.message(F.text.regexp(r"^/редактировать_задачу_(\d+)"))
+@router.message(F.text.regexp(r"^/task_(\d+)"))
 async def cmd_task_card(message: Message, pool: asyncpg.Pool):
-    match = re.match(r"^/редактировать_задачу_(\d+)", message.text)
+    match = re.match(r"^/task_(\d+)", message.text)
     task_id = int(match.group(1))
     task = await q.get_task(pool, task_id)
     if not task:
