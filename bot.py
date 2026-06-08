@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 async def set_commands(bot: Bot):
     commands = [
-        BotCommand(command="создать_чеклист",           description="Создать проект в этом чате"),
-        BotCommand(command="показать_чеклист",           description="Показать чеклист проекта"),
-        BotCommand(command="добавить_раздел",            description="Добавить раздел (Мерч, Декор…)"),
-        BotCommand(command="добавить_задачу",            description="Добавить задачу"),
-        BotCommand(command="изменить_сроки_реализации",  description="Изменить даты проекта"),
-        BotCommand(command="все_задачи",                 description="Борд арт-директора (личка)"),
+        BotCommand(command="new_project",           description="Создать проект в этом чате"),
+        BotCommand(command="show_checklist",           description="Показать чеклист проекта"),
+        BotCommand(command="new_section",            description="Добавить раздел (Мерч, Декор…)"),
+        BotCommand(command="new_task",            description="Добавить задачу"),
+        BotCommand(command="set_project_dates",  description="Изменить даты проекта"),
+        BotCommand(command="board",                 description="Борд арт-директора (личка)"),
     ]
     await bot.set_my_commands(commands)
 
