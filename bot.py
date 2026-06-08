@@ -28,9 +28,10 @@ async def main():
     pool = await init_db(DATABASE_URL)
 
     bot = Bot(token=BOT_TOKEN)
-    bot["pool"] = pool  # attach pool to bot for access in handlers
 
     dp = Dispatcher(storage=MemoryStorage())
+    dp["pool"] = pool  # pass pool via dispatcher workflow_data
+
     dp.include_router(projects.router)
     dp.include_router(tasks.router)
     dp.include_router(board.router)
