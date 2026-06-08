@@ -1,9 +1,10 @@
+import asyncpg
+import re
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-import re
 
 from db import queries as q
 from db.models import STATUS_LABELS
@@ -18,8 +19,8 @@ class AddSection(StatesGroup):
 
 
 class AddTask(StatesGroup):
-    waiting_section = State()
-    waiting_title   = State()
+    waiting_section  = State()
+    waiting_title    = State()
     waiting_deadline = State()
 
 
@@ -27,11 +28,8 @@ class EditDeadline(StatesGroup):
     waiting_date = State()
 
 
-# ── /добавить_раздел ──────────────────────────────────────────────────────────────
-
 @router.message(Command("добавить_раздел"))
-async def cmd_add_section(message: Message, state: FSMContext):
-    pool = message.bot["pool"]
+async def cmd_add_section(message: Message, state: FSMContext, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:
         await message.answer("Сначала создай проект: /создать_чеклист")
@@ -42,39 +40,30 @@ async def cmd_add_section(message: Message, state: FSMContext):
 
 
 @router.message(AddSection.waiting_name)
-async def section_name(message: Message, state: FSMContext):
+async def section_name(message: Message, state: FSMContext, pool: asyncpg.Pool):
     data = await state.get_data()
-    pool = message.bot["pool"]
     section = await q.create_section(pool, data["project_id"], message.text.strip())
     await state.clear()
     await message.answer(
-        f"✅ Раздел <b>{section['name']}</b> создан!\n"
-        "Добавь задачу: /добавить_задачу",
+        f"✅ Раздел <b>{section['name']}</b> создан!\nДобавь задачу: /добавить_задачу",
         parse_mode="HTML"
     )
 
 
-# ── /добавить_задачу ─────────────────────────────────────────────────────────────────
-
 @router.message(Command("добавить_задачу"))
-async def cmd_add_task(message: Message, state: FSMContext):
-    pool = message.bot["pool"]
+async def cmd_add_task(message: Message, state: FSMContext, pool: asyncpg.Pool):
     project = await q.get_project_by_chat(pool, message.chat.id)
     if not project:
         await message.answer("Сначала создай проект: /создать_чеклист")
         return
-
     sections = await q.get_sections(pool, project["id"])
     if not sections:
         await message.answer("Сначала создай раздел: /добавить_раздел")
         return
-
     await state.update_data(project_id=project["id"])
     await state.set_state(AddTask.waiting_section)
-    await message.answer(
-        "Выбери раздел для задачи:",
-        reply_markup=sections_keyboard(sections, project["id"], add_new=True)
-    )
+    await message.answer("Выбери раздел для задачи:",
+                         reply_markup=sections_keyboard(sections, project["id"], add_new=True))
 
 
 @router.callback_query(F.data.startswith("sel_section:"))
@@ -103,7 +92,7 @@ async def task_title(message: Message, state: FSMContext):
 
 
 @router.message(AddTask.waiting_deadline)
-async def task_deadline(message: Message, state: FSMContext):
+async def task_deadline(message: Message, state: FSMContext, pool: asyncpg.Pool):
     data = await state.get_data()
     deadline = None
     if message.text.strip() != "/skip":
@@ -111,12 +100,9 @@ async def task_deadline(message: Message, state: FSMContext):
         if not deadline:
             await message.answer("Не понял дату. дд.мм.гггг или /skip:")
             return
-
-    pool = message.bot["pool"]
     task = await q.create_task(pool, data["section_id"], data["project_id"],
                                 data["title"], deadline)
     await state.clear()
-
     await message.answer(
         f"📌 <b>{task['title']}</b>\n"
         f"📅 Дедлайн: {fmt_date(task['deadline'])}\n"
@@ -126,18 +112,14 @@ async def task_deadline(message: Message, state: FSMContext):
     )
 
 
-# ── /редактировать_задачу_N — task card with controls ────────────────────────────────────────
-
 @router.message(F.text.regexp(r"^/редактировать_задачу_(\d+)"))
-async def cmd_task_card(message: Message):
+async def cmd_task_card(message: Message, pool: asyncpg.Pool):
     match = re.match(r"^/редактировать_задачу_(\d+)", message.text)
     task_id = int(match.group(1))
-    pool = message.bot["pool"]
     task = await q.get_task(pool, task_id)
     if not task:
         await message.answer("Задача не найдена.")
         return
-
     status = STATUS_LABELS.get(task["status"], task["status"])
     await message.answer(
         f"📌 <b>{task['title']}</b>\n"
@@ -148,13 +130,10 @@ async def cmd_task_card(message: Message):
     )
 
 
-# ── Callbacks: status change ──────────────────────────────────────────────────
-
 @router.callback_query(F.data.startswith("status:"))
-async def cb_status(call: CallbackQuery):
+async def cb_status(call: CallbackQuery, pool: asyncpg.Pool):
     _, task_id_s, new_status = call.data.split(":")
     task_id = int(task_id_s)
-    pool = call.bot["pool"]
     await q.update_task_status(pool, task_id, new_status)
     task = await q.get_task(pool, task_id)
     status = STATUS_LABELS.get(task["status"])
@@ -168,20 +147,15 @@ async def cb_status(call: CallbackQuery):
     await call.answer(f"Статус: {status}")
 
 
-# ── Callbacks: delete task ────────────────────────────────────────────────────
-
 @router.callback_query(F.data.startswith("del_task:"))
-async def cb_delete_task(call: CallbackQuery):
+async def cb_delete_task(call: CallbackQuery, pool: asyncpg.Pool):
     task_id = int(call.data.split(":")[1])
-    pool = call.bot["pool"]
     task = await q.get_task(pool, task_id)
     if task:
         await q.delete_task(pool, task_id)
         await call.message.edit_text(f"🗑 Задача <b>{task['title']}</b> удалена.", parse_mode="HTML")
     await call.answer()
 
-
-# ── Callbacks: edit deadline ──────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("edit_deadline:"))
 async def cb_edit_deadline(call: CallbackQuery, state: FSMContext):
@@ -193,7 +167,7 @@ async def cb_edit_deadline(call: CallbackQuery, state: FSMContext):
 
 
 @router.message(EditDeadline.waiting_date)
-async def edit_deadline_input(message: Message, state: FSMContext):
+async def edit_deadline_input(message: Message, state: FSMContext, pool: asyncpg.Pool):
     data = await state.get_data()
     task_id = data["task_id"]
     if message.text.strip() == "/skip":
@@ -203,7 +177,6 @@ async def edit_deadline_input(message: Message, state: FSMContext):
         if not deadline:
             await message.answer("Не понял дату. дд.мм.гггг или /skip:")
             return
-    pool = message.bot["pool"]
     await q.update_task_deadline(pool, task_id, deadline)
     await state.clear()
     await message.answer(f"✅ Дедлайн обновлён: {fmt_date(deadline)}")
